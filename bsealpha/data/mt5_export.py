@@ -156,12 +156,20 @@ def export(config_path: str, *, discover_only: bool = False) -> int:  # pragma: 
         grid_rows: list[pl.DataFrame] = []
         meta_rows: list[dict] = []
         symbol_map: dict[int, str] = {}
+        total = len(symbols)
+        print(f"Exporting {total} symbols from {start} (this can take several minutes)...",
+              flush=True)
+        bar_total = 0
         for i, sym in enumerate(sorted(symbols)):
             code = 900000 + i                       # synthetic stable scrip_code
             symbol_map[code] = sym
             mt5.symbol_select(sym, True)
             rates = mt5.copy_rates_range(sym, tf, start_dt, _dt.datetime.now())
             g = rates_to_grid(rates, code, cfg)
+            nb = 0 if g is None else g.height
+            bar_total += nb
+            print(f"  [{i + 1:>3}/{total}] {sym:<12} {nb:>7,} bars   "
+                  f"(running total {bar_total:,})", flush=True)
             if g is None:
                 continue
             base = sym[:-len(suffix)] if suffix and sym.endswith(suffix) else sym
