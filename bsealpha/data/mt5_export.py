@@ -86,6 +86,7 @@ def rates_to_grid(rates, code: int, cfg) -> "object | None":  # pragma: no cover
     Shared by the batch exporter and the live runner so the server-tz -> session-minute
     mapping is defined exactly once.
     """
+    import numpy as np
     import pandas as pd
     import polars as pl
 
@@ -98,23 +99,28 @@ def rates_to_grid(rates, code: int, cfg) -> "object | None":  # pragma: no cover
     ts = ts.dt.tz_convert(market.active_profile().tz)
     mod = ts.dt.hour * 60 + ts.dt.minute
     minute = (mod - open_min).astype(int)
-    keep = ((mod >= open_min) & (mod < close_min)).values
+    keep = np.asarray((mod >= open_min) & (mod < close_min))
     if not keep.any():
         return None
     sub = df[keep]
-    close = sub["close"].astype(float)
-    vol = sub["tick_volume"].astype(float)
+    n = int(keep.sum())
+    # build with explicit numpy arrays / a plain list for dates -- avoids pandas extension
+    # arrays (e.g. StringArray) that polars' Series constructor rejects, and never relies on
+    # scalar broadcasting in the DataFrame dict.
+    close = np.asarray(sub["close"], dtype=float)
+    vol = np.asarray(sub["tick_volume"], dtype=float)
+    minute_arr = np.asarray(minute[keep], dtype=np.int64)
     return pl.DataFrame({
-        "scrip_code": code,
-        "date": ts[keep].dt.strftime("%Y-%m-%d").values,
-        "minute": minute[keep].values,
-        "session_min": minute[keep].astype(float).values,
-        "open": sub["open"].astype(float).values,
-        "high": sub["high"].astype(float).values,
-        "low": sub["low"].astype(float).values,
-        "close": close.values, "vwap": close.values,
-        "turnover": (close * vol).values, "n_trades": 0,
-        "mid": close.values, "micro": close.values,
+        "scrip_code": np.full(n, int(code), dtype=np.int64),
+        "date": ts[keep].dt.strftime("%Y-%m-%d").tolist(),
+        "minute": minute_arr,
+        "session_min": minute_arr.astype(float),
+        "open": np.asarray(sub["open"], dtype=float),
+        "high": np.asarray(sub["high"], dtype=float),
+        "low": np.asarray(sub["low"], dtype=float),
+        "close": close, "vwap": close,
+        "turnover": close * vol, "n_trades": np.zeros(n, dtype=np.int64),
+        "mid": close, "micro": close,
     })
 
 
