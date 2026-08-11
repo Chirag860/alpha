@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bsealpha"
+version = "0.1.0"
+description = "Intraday cross-sectional ML alpha on BSE cash equities (1-30 min horizon)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "bsealpha" }]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scipy>=1.11",
+    "polars>=1.0",
+    "pyyaml>=6.0",
+    "lightgbm>=4.0",
+    "scikit-learn>=1.3",
+]
+
+[project.optional-dependencies]
+dl = ["torch>=2.1"]
+live = ["kiteconnect>=4.0", "websockets>=12.0"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+bsealpha-research = "run_research:main"
+
+[tool.setuptools]
+packages = [
+    "bsealpha",
+    "bsealpha.data", "bsealpha.universe", "bsealpha.bars", "bsealpha.features",
+    "bsealpha.labeling", "bsealpha.models", "bsealpha.validation",
+    "bsealpha.portfolio", "bsealpha.backtest", "bsealpha.execution", "bsealpha.live",
+]
+py-modules = ["run_research", "run_free", "run_live"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:Sortedness of columns cannot be checked:UserWarning",
+]

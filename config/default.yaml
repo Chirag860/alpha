@@ -1,0 +1,215 @@
+# =============================================================================
+# bsealpha default configuration
+# Intraday cross-sectional ML on BSE cash equities. Every number here is a design
+# knob from the research report (bse_intraday_ml_research_report.md); section refs
+# in comments. Values marked [est] must be re-measured on real data.
+# =============================================================================
+
+# ------------------------------------------------------------------ market profile
+# Selects venue conventions (session hours, tick bands) in bsealpha.market.
+# "bse" = BSE cash equities (IST); "us_equity" = US stock CFDs (ET, decimalized).
+market:
+  profile: "bse"
+
+# ------------------------------------------------------------------ session (IST)
+session:
+  open_min: 555        # 09:15 in minutes-of-day
+  close_min: 930       # 15:30
+  flatten_min: 915     # 15:15 forced-unwind start (hard vertical barrier)  (S2.5, S0.4)
+  square_off_start: 885  # 14:45 MIS square-off window begins               (S2.1)
+
+# ------------------------------------------------------------------ synthetic data
+# Multi-name panel generator so the whole pipeline runs with zero paid data.
+synthetic:
+  n_names: 30
+  n_days: 30
+  n_sectors: 5
+  seed: 7
+  base_price_range: [80.0, 3000.0]
+  ann_vol_range: [0.20, 0.40]      # per-name annualized vol                  (S0.2)
+  market_vol_ann: 0.18             # common market factor vol
+  sector_vol_ann: 0.12             # sector factor vol
+  market_beta_range: [0.6, 1.4]
+  sector_gamma_range: [0.5, 1.2]
+  bar_seconds: 45                  # median event-bar duration target         (S2.2)
+  # fraction of names carrying each surveillance/exclusion flag (for screen tests)
+  frac_t2t: 0.08
+  frac_asm: 0.05
+  frac_gsm: 0.03
+  frac_suspended: 0.02
+
+# ------------------------------------------------------------------ universe screen (S1.2)
+universe:
+  lookback_days: 20
+  min_bse_turnover: 5.0e+7          # Rs 5 crore/day median BSE turnover
+  min_bse_trades: 3000
+  min_price: 50.0
+  max_price: 20000.0
+  max_spread_bps: 15.0
+  min_circuit_band_pct: 20.0       # exclude 2/5/10% band names
+  allowed_series: ["A", "B"]
+  participation_pct: 1.5           # clip cap as % of that name's ADV          (S1.2, S6.4)
+
+# ------------------------------------------------------------------ bars (S2.2)
+bars:
+  kind: "rupee"                    # rupee | volume | tick | time
+  target_bars_per_day: 400         # X_i = median_daily_turnover_i / this
+  common_grid_seconds: 60          # common 1-min grid for cross-sectional ops
+
+# ------------------------------------------------------------------ residualization (S2.3, S5.5)
+residualize:
+  method: "demean_sector"          # demean_sector (leak-free default) | regression
+  beta_mode: "trailing"            # trailing (causal, leak-free) | global (leaky, opt-in)
+  beta_lookback_sessions: 60
+  ewma_halflife_sessions: 20
+
+# ------------------------------------------------------------------ features (S3.2)
+features:
+  ofi_levels: 5
+  ofi_lookbacks_sec: [10, 60, 300, 1800]
+  vol_windows_min: [1, 5, 15]
+  tod_vol_bins: 25                 # time-of-day vol profile bins              (S2.5)
+  cross_sectional_lag_min: 1       # cross-section built from t-1              (S3.3)
+  micro_price: true
+  circuit_distance: true
+
+# ------------------------------------------------------------------ labeling (S2.3, S2.5)
+labeling:
+  horizon_min: 15
+  u: 1.0                           # upper barrier in sigma_resid
+  l: 1.0                           # lower barrier
+  sigma_halflife_bars: 500
+  meta_cost_bps: 4.18              # round-trip fee floor the meta-model must clear (S0.1)
+  n_rank_buckets: 5                # LambdaRank label buckets
+
+# ------------------------------------------------------------------ sample weights (S3.6, S4.4)
+weights:
+  time_decay_halflife_days: 180    # ~6 months
+  use_uniqueness: true
+  use_return_attribution: true
+  use_liquidity: true
+  use_xs_concurrency: true         # multiply by 1/sqrt(n_active_names_at_t)
+
+# ------------------------------------------------------------------ models (S4.2, S4.3)
+model:
+  primary: "lambdarank"            # lambdarank | regression
+  lambdarank:
+    objective: "lambdarank"
+    metric: "ndcg"
+    ndcg_eval_at: [10, 30]
+    lambdarank_truncation_level: 30
+    learning_rate: 0.02
+    num_leaves: 31
+    max_depth: 6
+    min_data_in_leaf: 1000
+    feature_fraction: 0.6
+    bagging_fraction: 0.7
+    bagging_freq: 1
+    lambda_l2: 5.0
+    max_bin: 127
+    n_estimators: 300
+    verbosity: -1
+  regression:
+    objective: "regression"
+    metric: "l2"
+    learning_rate: 0.02
+    num_leaves: 31
+    max_depth: 6
+    min_data_in_leaf: 1000
+    lambda_l2: 5.0
+    max_bin: 127
+    n_estimators: 300
+    verbosity: -1
+  meta:
+    objective: "binary"
+    metric: "auc"
+    learning_rate: 0.02
+    num_leaves: 15
+    max_depth: 5
+    min_data_in_leaf: 500
+    lambda_l2: 10.0
+    max_bin: 127
+    n_estimators: 200
+    is_unbalance: true
+    verbosity: -1
+  tcn:
+    enabled: false                 # optional (S4.3); off in the fast pipeline
+    seq_len: 32
+    channels: 32
+    levels: 4
+    kernel_size: 3
+    dropout: 0.1
+    embedding_dim: 16
+    stock_embedding_dim: 8
+    epochs: 3
+    batch_size: 256
+    lr: 1.0e-3
+  monotone_features: ["ofi_integrated", "circuit_dist_upper"]
+
+# ------------------------------------------------------------------ validation (S5)
+validation:
+  cpcv_n_groups: 12
+  cpcv_k_test: 2
+  embargo_days: 2                  # >= longest feature lookback in practice
+  pbo_blocks: 16
+  dsr_trial_sr_std: 0.5
+  breadth_gate: 3.0                # effective-breadth deploy gate (S0.5, S11.1)
+  # tripwires (S0.5, S11.3): warn when exceeded
+  tripwire_sharpe: 4.0
+  tripwire_meta_auc: 0.62
+  tripwire_ic: 0.08
+
+# ------------------------------------------------------------------ cost stack (S0.1)
+costs:
+  stt_bps_sell: 2.5                # STT 0.025% sell-side only
+  bse_txn_bps: 0.75               # 0.00375% both sides (flat, no maker/taker)
+  stamp_bps_buy: 0.30             # 0.003% buy-side only
+  sebi_bps: 0.02                  # 0.0001% both sides
+  gst_rate: 0.18                  # on (txn + sebi + brokerage)
+  brokerage_per_order: 20.0       # Rs 20 flat per ORDER (not per fill)        (S6.2)
+  otr_penalty_per_order: 0.0      # [est] order-to-trade-ratio penalty proxy
+  impact_Y: 0.7                   # square-root-law coefficient                (S6.4)
+
+# ------------------------------------------------------------------ portfolio (S7.1)
+portfolio:
+  gross_target: 1.0e+7             # Rs 1 crore gross book (clips must clear the min-clip floor)
+  max_names: 40
+  max_participation: 0.03         # 3% of BSE ADV per clip
+  min_clip: 5.0e+5                 # Rs 5 lakh min clip (brokerage floor)
+  sector_cap: 0.25
+  no_trade_band_frac: 0.5         # rebalance only when gap > this fraction of pos (S7.1)
+
+# ------------------------------------------------------------------ backtest (S6, S8)
+backtest:
+  cancel_model: "proportional"    # optimistic | proportional | pessimistic
+  decision_interval_min: 60       # rebalance cadence; larger => lower turnover  (S7.2)
+  score_smooth_min: 30            # EWMA-smooth the signal for persistence       (S7.1)
+  latency_ms: 250                 # decision-to-ack                            (S8.2)
+  max_ops: 10                     # SEBI orders-per-second ceiling             (S8.1)
+  circuit_no_new_pct: 1.5         # no new positions within this % of a band
+  circuit_flatten_pct: 1.0        # forced flatten within this %
+  markout_horizons_min: [1, 5, 15, 30]
+  equity: 1.0e+7                   # Rs 1 crore notional base
+
+# ------------------------------------------------------------------ deployment safety (S7.3, S8.1)
+deploy:
+  mode: "paper"                    # paper | dry_run | live  (live needs env confirmation)
+
+# ------------------------------------------------------------------ live execution (S7, S8)
+execution:
+  algo_id: "BSEALPHA-0001"         # exchange-assigned Algo-ID, tag EVERY order   (S8.1)
+  max_ops: 10                      # SEBI orders-per-second ceiling               (S8.1)
+  flatten_start_min: 915           # 15:15 begin forced unwind (LIMIT)            (S7.3)
+  escalate_min: 925                # 15:25 escalate to MARKET                     (S7.3)
+  hard_flat_min: 928               # 15:28 guaranteed flat                        (S7.3)
+  taker_slippage_bps: 1.0          # paper-broker taker slippage proxy
+  half_spread_bps: 1.0             # passive quote offset from mid (S0.3: 0.3-2 bps)
+  maker_fill_prob: 0.4             # P(fill | passive order touched) = queue bound (S6.3)
+  min_clip: 5.0e+5                 # skip trades below the brokerage floor        (S6.2)
+
+# ------------------------------------------------------------------ risk / kill switches (S7.3)
+risk:
+  max_feed_staleness_s: 5.0        # feed staleness -> flatten                    (S7.3)
+  max_reject_rate: 0.02            # order reject rate > 2% -> flatten            (S8.4)
+  max_clock_drift_ms: 50.0         # clock drift vs NTP -> flatten                (S7.3)
+  max_position_mismatch: 1.0e+5    # local vs broker position gap (rupees)        (S8.4)

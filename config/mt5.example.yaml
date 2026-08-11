@@ -1,0 +1,73 @@
+# =============================================================================
+# MT5 stock-CFD overlay (Phase 1 plumbing) -- EXAMPLE / TEMPLATE.
+#
+# Copy this to config/mt5.yaml and fill in your demo credentials:
+#     cp config/mt5.example.yaml config/mt5.yaml   (Windows: copy config\mt5.example.yaml config\mt5.yaml)
+# config/mt5.yaml is gitignored so your login/password never get committed.
+#
+# Partial config: deep-merged ON TOP OF config/default.yaml by the MT5 runners
+# (run_mt5.py, bsealpha/data/mt5_export.py). Repoints the BSE pipeline onto a
+# US stock-CFD universe traded on an MT5 demo account.
+# =============================================================================
+
+# venue conventions: US regular trading hours, decimalized ticks
+market:
+  profile: "us_equity"
+
+# route to the demo account (no real capital, no live-confirmation gate)
+deploy:
+  mode: "demo"
+
+# forced-flatten schedule in minutes-of-day (ET). Session 09:30-16:00 = 570..960.
+execution:
+  algo_id: "MT5ALPHA-0001"     # accepted-and-ignored by the MT5 adapter
+  max_ops: 10
+  flatten_start_min: 955        # 15:55 begin forced unwind (LIMIT)
+  escalate_min: 957             # 15:57 escalate to MARKET
+  hard_flat_min: 959            # 15:59 guaranteed flat
+  taker_slippage_bps: 1.0
+  half_spread_bps: 1.0
+  maker_fill_prob: 0.4
+  min_clip: 50.0                # $50 min clip (demo-scaled; was Rs 5 lakh)
+
+# US stock-CFD cost profile: no STT/stamp/GST/flat-brokerage. Commission-in-bps
+# folded into the per-side transaction charge; keep the square-root impact model.
+costs:
+  stt_bps_sell: 0.0
+  bse_txn_bps: 0.4              # ~0.2 bps/side round-trip commission proxy
+  stamp_bps_buy: 0.0
+  sebi_bps: 0.0
+  gst_rate: 0.0
+  brokerage_per_order: 0.0
+  otr_penalty_per_order: 0.0
+  impact_Y: 0.7
+
+# demo-scaled book (USD). Placeholders -- tune to your demo balance in Phase 2.
+portfolio:
+  gross_target: 5.0e+4          # $50k gross book
+  max_names: 40
+  max_participation: 0.03
+  min_clip: 50.0                # $50 min clip
+  sector_cap: 0.25
+  no_trade_band_frac: 0.5
+
+backtest:
+  equity: 5.0e+4                # $50k notional base
+
+# ------------------------------------------------------------------ MT5 connection
+mt5:
+  server: "MetaQuotes-Demo"     # your broker's server name (exact, case-sensitive)
+  login: 0                      # <-- your demo account number (integer)
+  password: ""                  # <-- your demo password
+  terminal_path: ""             # optional full path to terminal64.exe if init fails
+  timeframe: "M1"               # bar timeframe for data + live polling
+  discover: true                # auto-discover the tradable stock-CFD universe
+  symbol_group: "*Stock*"       # path/group substring filter for discovery
+  symbols: []                   # explicit symbol list; used when discover=false
+  symbol_suffix: ""             # broker-specific suffix (e.g. ".NAS", "#") if any
+  max_symbols: 200              # cap the discovered universe (breadth vs. rate limits)
+  data_dir: "data/mt5"          # exported Parquet lands / is read here
+  sector_map_path: "config/us_sectors.yaml"
+  history_start: "2024-01-01"   # first date to export
+  server_tz_offset_hours: 3     # broker server tz minus UTC (MetaQuotes-Demo ~ +2/+3 DST)
+  netting: true                 # REQUIRE a netting account (clean signed positions)

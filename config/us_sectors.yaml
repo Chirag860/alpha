@@ -1,0 +1,93 @@
+# Starter US-equity sector map: base ticker -> sector. Used by mt5_export.py to
+# label discovered stock CFDs for the sector-neutral book. Symbols not listed get
+# sector "UNKNOWN" (they still trade, but carry no sector-neutralization signal).
+# Extend this as your discovered universe grows. Keys are the BASE ticker (no
+# broker suffix); the exporter strips mt5.symbol_suffix before lookup.
+
+# Information Technology
+AAPL: TECH
+MSFT: TECH
+NVDA: TECH
+AVGO: TECH
+ORCL: TECH
+CRM: TECH
+ADBE: TECH
+CSCO: TECH
+AMD: TECH
+INTC: TECH
+QCOM: TECH
+TXN: TECH
+IBM: TECH
+
+# Communication Services
+GOOGL: COMM
+GOOG: COMM
+META: COMM
+NFLX: COMM
+DIS: COMM
+CMCSA: COMM
+T: COMM
+VZ: COMM
+
+# Consumer Discretionary
+AMZN: DISC
+TSLA: DISC
+HD: DISC
+MCD: DISC
+NKE: DISC
+LOW: DISC
+SBUX: DISC
+BKNG: DISC
+
+# Consumer Staples
+WMT: STAPLES
+PG: STAPLES
+KO: STAPLES
+PEP: STAPLES
+COST: STAPLES
+PM: STAPLES
+
+# Financials
+JPM: FIN
+BAC: FIN
+WFC: FIN
+GS: FIN
+MS: FIN
+C: FIN
+AXP: FIN
+BLK: FIN
+V: FIN
+MA: FIN
+
+# Health Care
+UNH: HEALTH
+JNJ: HEALTH
+LLY: HEALTH
+PFE: HEALTH
+MRK: HEALTH
+ABBV: HEALTH
+TMO: HEALTH
+ABT: HEALTH
+
+# Industrials
+CAT: INDUST
+BA: INDUST
+HON: INDUST
+GE: INDUST
+UPS: INDUST
+RTX: INDUST
+DE: INDUST
+
+# Energy
+XOM: ENERGY
+CVX: ENERGY
+COP: ENERGY
+SLB: ENERGY
+
+# Utilities / Materials / Real Estate
+NEE: UTIL
+DUK: UTIL
+LIN: MATERIALS
+SHW: MATERIALS
+AMT: REALESTATE
+PLD: REALESTATE

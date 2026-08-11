@@ -1,0 +1,19 @@
+# Core numerics
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+polars>=1.0          # tick/panel processing (Arrow-backed, lazy/streaming)
+pyyaml>=6.0          # config
+
+# Modeling
+lightgbm>=4.0        # primary (LambdaRank + regression) + meta GBDT
+                     #   macOS: needs OpenMP -> `brew install libomp`
+scikit-learn>=1.3    # isotonic calibration, HistGradientBoosting fallback
+torch>=2.1           # OPTIONAL shared-weight TCN trunk (§4.3); pipeline runs without it
+
+# Optional live/historical data adapters (NOT needed for the synthetic demo)
+# kiteconnect>=4.0   # Zerodha Kite Connect broker API (live feed + execution)
+# websockets>=12.0   # generic broker websocket client
+
+# Dev / test
+pytest>=7.4

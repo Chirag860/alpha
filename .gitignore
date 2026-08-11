@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Test / cache
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Research artifacts
+*.sqlite
+*.parquet
+trials.sqlite
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Virtualenv
+.venv/
+venv/
+
+# Local data / exports (top-level only, NOT the bsealpha/data package)
+/data/
+
+# Secrets: real MT5 credentials live here (use config/mt5.example.yaml as the template)
+config/mt5.yaml
