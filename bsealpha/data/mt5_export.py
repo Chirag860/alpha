@@ -38,21 +38,38 @@ def _load_mt5_config(config_path: str):
 
 
 def discover_symbols(mt5, cfg) -> list[str]:
-    """Return tradable stock-CFD symbols matching ``mt5.symbol_group`` (or the explicit list)."""
+    """Return tradable stock-CFD symbols whose PATH contains ``mt5.symbol_group``.
+
+    NOTE: MT5's ``symbols_get(group=...)`` filters by symbol *name* (e.g. "AAPL"), not by the
+    folder path, so a name mask like ``*Stock*`` matches nothing. We instead pull all symbols
+    and match ``mt5.symbol_group`` (with any surrounding ``*`` stripped) as a case-insensitive
+    substring of ``symbol.path`` -- e.g. ``*Stock*`` selects everything under ``Nasdaq\\Stock``.
+    When capping to ``max_symbols``, prefer names present in the sector map (liquid large-caps).
+    """
     m = cfg.mt5
     if not bool(getattr(m, "discover", True)):
         return list(getattr(m, "symbols", []) or [])
-    group = str(getattr(m, "symbol_group", "*Stock*") or "*")
-    syms = mt5.symbols_get(group) or ()
+    needle = str(getattr(m, "symbol_group", "*Stock*") or "").strip("*").lower()
     names = []
-    for s in syms:
-        # keep only symbols currently tradable (full trade mode)
-        trade_mode = getattr(s, "trade_mode", None)
-        if trade_mode == getattr(mt5, "SYMBOL_TRADE_MODE_DISABLED", 0):
+    for s in (mt5.symbols_get() or ()):
+        path = (getattr(s, "path", "") or "").lower()
+        if needle and needle not in path:
+            continue
+        if getattr(s, "trade_mode", None) == getattr(mt5, "SYMBOL_TRADE_MODE_DISABLED", 0):
             continue
         names.append(s.name)
     cap = int(getattr(m, "max_symbols", 0) or 0)
-    return names[:cap] if cap else names
+    if cap and len(names) > cap:
+        # prioritize sector-mapped tickers (known liquid names) so the capped universe is
+        # sensible rather than the first N alphabetically.
+        sectors = _sector_map(cfg)
+        suffix = str(getattr(m, "symbol_suffix", "") or "")
+        def base(n: str) -> str:
+            return n[:-len(suffix)] if suffix and n.endswith(suffix) else n
+        preferred = [n for n in names if base(n) in sectors]
+        rest = [n for n in names if base(n) not in sectors]
+        names = (preferred + rest)[:cap]
+    return names
 
 
 def _sector_map(cfg) -> dict[str, str]:
