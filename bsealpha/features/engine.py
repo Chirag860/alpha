@@ -104,8 +104,8 @@ def _volatility_and_momentum(grid: pl.DataFrame) -> pl.DataFrame:
         pl.col("_r2").rolling_sum(5, min_samples=2).over(grp).alias("rv_5"),
         pl.col("_r2").rolling_sum(15, min_samples=3).over(grp).alias("rv_15"),
         (_MU1_INV2 * pl.col("_bp_prod").rolling_sum(5, min_samples=2).over(grp)).alias("bpv_5"),
-        pl.col("r_resid").rolling_sum(5, min_samples=1).over(grp).shift(1).over(grp).alias("resid_mom_5"),
-        pl.col("r_resid").rolling_sum(15, min_samples=1).over(grp).shift(1).over(grp).alias("resid_mom_15"),
+        pl.col("r_resid").rolling_sum(5, min_samples=1).shift(1).over(grp).alias("resid_mom_5"),
+        pl.col("r_resid").rolling_sum(15, min_samples=1).shift(1).over(grp).alias("resid_mom_15"),
     )
     g = g.with_columns(
         (pl.col("rv_5") - pl.col("bpv_5")).clip(lower_bound=0.0).alias("jump_5"),

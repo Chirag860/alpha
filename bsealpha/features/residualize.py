@@ -82,7 +82,7 @@ def fit_betas_trailing(grid: pl.DataFrame, lookback_sessions: int = 60) -> pl.Da
         .sort(["scrip_code", "date"])
     )
     roll = lambda c: (pl.col(c).rolling_sum(lookback_sessions, min_samples=3)
-                      .over("scrip_code").shift(1).over("scrip_code"))
+                      .shift(1).over("scrip_code"))
     stats = stats.with_columns([roll(c).alias(f"r_{c}") for c in
                                 ("s11", "s22", "s12", "s1y", "s2y")])
     m = stats.select(["r_s11", "r_s22", "r_s12", "r_s1y", "r_s2y"]).to_numpy()
@@ -161,7 +161,6 @@ def add_residual_vol(grid: pl.DataFrame, cfg: Config,
         pl.col("r_resid")
         .pow(2)
         .shift(1)
-        .over("scrip_code")
         .ewm_mean(alpha=alpha, min_samples=5, adjust=False)
         .over("scrip_code")
         .sqrt()
