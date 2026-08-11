@@ -90,6 +90,7 @@ def live_loop(cfg, mt5, adapter, model, betas, meta) -> None:  # pragma: no cove
         # assemble the trailing grid across all names from fresh terminal bars
         frames = []
         for code, sym in symbol_map.items():
+            mt5.symbol_select(sym, True)             # subscribe so the terminal streams fresh bars
             rates = mt5.copy_rates_from_pos(sym, tf, 0, n_tail)
             g = rates_to_grid(rates, code, cfg)
             if g is not None:
@@ -102,7 +103,11 @@ def live_loop(cfg, mt5, adapter, model, betas, meta) -> None:  # pragma: no cove
         grid = (pl.concat(frames, how="vertical_relaxed")
                 .with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
                 .sort(["date", "minute", "scrip_code"]))
+        # key off the CURRENT session only: symbols that still return prior-day bars would
+        # otherwise drag the max minute to the previous close (15:59 -> minute 389).
+        grid = grid.filter(pl.col("date") == grid["date"].max())
         cur = int(grid["minute"].max())
+        n_names_now = grid.filter(pl.col("minute") == cur)["scrip_code"].n_unique()
         if cur == last_minute:                       # no new completed minute yet
             time.sleep(2.0)
             continue
@@ -130,8 +135,9 @@ def live_loop(cfg, mt5, adapter, model, betas, meta) -> None:  # pragma: no cove
                for r in latest.select(["scrip_code", "mid"]).iter_rows(named=True)}
         mod = market.session_open_min() + cur
         res = mgr.step(mod, time.time(), targets, mkt)
-        print(f"[min {cur:3d}] phase={res.phase} orders={len(res.orders)} "
-              f"rejects={adapter.reject_rate():.2%} halted={res.halted}")
+        print(f"[min {cur:3d}] names={n_names_now:2d} phase={res.phase} "
+              f"orders={len(res.orders)} rejects={adapter.reject_rate():.2%} "
+              f"halted={res.halted}")
         if res.halted:
             print("  RISK HALT:", "; ".join(res.reasons))
             break
