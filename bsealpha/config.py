@@ -44,8 +44,15 @@ class Config(Mapping[str, Any]):
 
     # -- attribute access ---------------------------------------------------
     def __getattr__(self, key: str) -> Any:
+        # Read _data via __dict__ to avoid recursing through __getattr__ before __init__
+        # runs (e.g. during unpickling, where the instance is created without _data set).
+        if key == "_data":
+            raise AttributeError(key)
+        data = self.__dict__.get("_data")
+        if data is None:
+            raise AttributeError(key)
         try:
-            return self._data[key]
+            return data[key]
         except KeyError as exc:  # pragma: no cover - defensive
             raise AttributeError(key) from exc
 

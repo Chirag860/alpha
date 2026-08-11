@@ -19,8 +19,15 @@ like run_free.py). Proper OOF training + a serialized model artifact is Phase 2.
 
 from __future__ import annotations
 
+import os
+
+# Cap polars parallelism BEFORE importing polars -- reduces memory and improves stability
+# when running x64-emulated (e.g. an Apple-Silicon Windows VM). Override by pre-setting it.
+os.environ.setdefault("POLARS_MAX_THREADS", "1")
+
 import argparse
 import json
+import pickle
 import time
 from pathlib import Path
 
@@ -132,12 +139,24 @@ def main() -> int:  # pragma: no cover - VM only
     ap.add_argument("--config", default="config/mt5.yaml")
     ap.add_argument("--dry-run", action="store_true",
                     help="Compute + log orders but never send (deploy.mode=dry_run)")
+    ap.add_argument("--model", default=None,
+                    help="Load a pre-trained artifact from train_model.py instead of training "
+                         "here. Use this on the VM so it never does heavy training.")
     args = ap.parse_args()
 
     cfg = _load_cfg(args.config, dry_run=args.dry_run)
     from bsealpha.execution import MT5BrokerAdapter, connect_mt5
 
-    model, betas, meta = _train(cfg)
+    if args.model:
+        with open(args.model, "rb") as fh:
+            art = pickle.load(fh)
+        model = art["ensemble"]
+        betas = {int(k): float(v) for k, v in art["betas"].items()}
+        meta = pl.DataFrame(art["meta_rows"])
+        print(f"Loaded model artifact {args.model} | {meta.height} names "
+              f"(profile={art.get('profile')})")
+    else:
+        model, betas, meta = _train(cfg)
     mt5 = connect_mt5(cfg)
     try:
         symbol_map = {int(k): v for k, v in

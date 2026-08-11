@@ -109,7 +109,15 @@ class PooledEnsemble:
         ctx = [c for c in self.meta_cols if c not in ("primary_score", "primary_conf")]
         base = np.column_stack([primary_score, np.abs(primary_score)])
         if ctx:
-            base = np.column_stack([base, panel.select(ctx).to_numpy()])
+            n = len(primary_score)
+            present = set(panel.columns)
+            # Columns absent at predict time (e.g. the label-derived 'truncated' in the live
+            # loop, which predicts on features only) default to 0, preserving the exact column
+            # layout the meta-model was fit with.
+            cols = np.column_stack([
+                panel[c].to_numpy() if c in present else np.zeros(n) for c in ctx
+            ])
+            base = np.column_stack([base, cols])
         return base
 
     def _generate_oof_primary(self, panel: pl.DataFrame) -> np.ndarray:
