@@ -45,12 +45,15 @@ class MT5BrokerAdapter:
     """
 
     def __init__(self, mt5, symbol_map: dict[int, str], *, magic: int = 40100,
-                 deviation: int = 20) -> None:
+                 deviation: int = 20, force_market: bool = False) -> None:
         self.mt5 = mt5
         self.symbol_map = dict(symbol_map)
         self.rev_map = {v: k for k, v in self.symbol_map.items()}
         self.magic = int(magic)
         self.deviation = int(deviation)
+        # force_market: send every order as a MARKET order (immediate fill). Reliable on a
+        # demo/delayed feed where passive limit prices are stale; set for the demo path.
+        self.force_market = bool(force_market)
         self._info_cache: dict[str, object] = {}
         self._seen_deals: set[int] = set()
         self._deal_cursor: int = 0                # last deal time seen (epoch seconds)
@@ -113,8 +116,10 @@ class MT5BrokerAdapter:
         digits = int(getattr(info, "digits", 2) or 2)
         tick = mt5.symbol_info_tick(symbol)
         is_buy = order.side > 0
+        otype = "MARKET" if self.force_market else order.order_type
+        is_pending = otype != "MARKET"
 
-        if order.order_type == "MARKET":
+        if otype == "MARKET":
             price = float(tick.ask if is_buy else tick.bid)
             req = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -135,7 +140,7 @@ class MT5BrokerAdapter:
             "volume": lots,
             "magic": self.magic,
             "type_time": getattr(mt5, "ORDER_TIME_DAY", 0),
-            "type_filling": self._filling_mode(),
+            "type_filling": self._filling_mode(symbol, is_pending=is_pending),
             "comment": (order.algo_id or "bsealpha")[:31],
         })
 
@@ -147,15 +152,26 @@ class MT5BrokerAdapter:
         if not ok:
             order.status = "REJECTED"
             self.reject_count += 1
+            if self.reject_count <= 5:       # surface the reason for the first few rejects
+                print(f"  MT5 reject {symbol} {otype} vol={lots}: retcode={retcode} "
+                      f"{getattr(result, 'comment', '')!r}")
             return order
         # DONE => filled market order; PLACED => resting pending order
-        order.status = "RESTING" if order.order_type != "MARKET" else "ACKED"
+        order.status = "RESTING" if is_pending else "ACKED"
         return order
 
-    def _filling_mode(self):
+    def _filling_mode(self, symbol: str, *, is_pending: bool):
+        """Pick a valid fill mode: RETURN for pending orders; a symbol-supported IOC/FOK for
+        market orders (sending IOC/FOK on a pending order, or an unsupported mode, is rejected)."""
         mt5 = self.mt5
-        return getattr(mt5, "ORDER_FILLING_IOC",
-                       getattr(mt5, "ORDER_FILLING_FOK", 0))
+        if is_pending:
+            return getattr(mt5, "ORDER_FILLING_RETURN", 2)
+        modes = int(getattr(self._symbol_info(symbol), "filling_mode", 0) or 0)
+        if modes & getattr(mt5, "SYMBOL_FILLING_IOC", 2):
+            return getattr(mt5, "ORDER_FILLING_IOC", 1)
+        if modes & getattr(mt5, "SYMBOL_FILLING_FOK", 1):
+            return getattr(mt5, "ORDER_FILLING_FOK", 0)
+        return getattr(mt5, "ORDER_FILLING_RETURN", 2)
 
     # -- fills (async, from the deal history) -----------------------------
     def poll_fills(self) -> list[Fill]:

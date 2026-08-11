@@ -171,8 +171,10 @@ def main() -> int:  # pragma: no cover - VM only
     try:
         symbol_map = {int(k): v for k, v in
                       json.loads((Path(str(cfg.mt5.data_dir)) / "symbol_map.json").read_text()).items()}
-        adapter = MT5BrokerAdapter(mt5, symbol_map,
-                                   magic=abs(hash(str(cfg.execution.algo_id))) % 2_000_000)
+        adapter = MT5BrokerAdapter(
+            mt5, symbol_map,
+            magic=abs(hash(str(cfg.execution.algo_id))) % 2_000_000,
+            force_market=bool(getattr(cfg.mt5, "use_market_orders", True)))
         live_loop(cfg, mt5, adapter, model, betas, meta)
     finally:
         mt5.shutdown()

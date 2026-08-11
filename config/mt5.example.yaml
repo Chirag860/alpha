@@ -65,6 +65,7 @@ mt5:
   symbol_group: "*Stock*"       # path/group substring filter for discovery
   symbols: []                   # explicit symbol list; used when discover=false
   symbol_suffix: ""             # broker-specific suffix (e.g. ".NAS", "#") if any
+  use_market_orders: true       # demo: send MARKET orders (reliable fills). false = passive limits
   max_symbols: 200              # cap the discovered universe (breadth vs. rate limits)
   data_dir: "data/mt5"          # exported Parquet lands / is read here
   sector_map_path: "config/us_sectors.yaml"

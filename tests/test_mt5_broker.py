@@ -185,6 +185,15 @@ def test_limit_order_rests_as_pending():
     assert a.positions() == {}                     # pending -> no position yet
 
 
+def test_force_market_sends_limits_as_market():
+    """force_market routes even a LIMIT order as a market DEAL -> immediate fill/position."""
+    fake = FakeMT5(SPEC)
+    a = MT5BrokerAdapter(fake, SYMBOL_MAP, force_market=True)
+    a.place_order(_order(101, +1, 20.0, otype="LIMIT", price=99.50))
+    assert fake._pending == []                     # no resting order
+    assert a.positions()[101].qty == pytest.approx(20.0)   # filled at market instead
+
+
 def test_cancel_all_resting_removes_our_pendings():
     fake = FakeMT5(SPEC)
     a = MT5BrokerAdapter(fake, SYMBOL_MAP)
