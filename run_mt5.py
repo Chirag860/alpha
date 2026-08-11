@@ -97,7 +97,11 @@ def live_loop(cfg, mt5, adapter, model, betas, meta) -> None:  # pragma: no cove
         if not frames:
             time.sleep(5.0)
             continue
-        grid = pl.concat(frames, how="vertical_relaxed").sort(["date", "minute", "scrip_code"])
+        # rates_to_grid emits `date` as a string; cast to Date (as the batch paths do) so
+        # date-based features (e.g. expiry_flag's weekday) work.
+        grid = (pl.concat(frames, how="vertical_relaxed")
+                .with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
+                .sort(["date", "minute", "scrip_code"]))
         cur = int(grid["minute"].max())
         if cur == last_minute:                       # no new completed minute yet
             time.sleep(2.0)
