@@ -27,7 +27,34 @@ def _universe(cfg_mt5: dict) -> list[tuple[str, str]]:
     return out
 
 
-def export(config_path: str, *, discover: bool = False) -> int:  # pragma: no cover - VM only
+# asset-class label -> case-insensitive substring of the symbol's MT5 path
+_AUTO_GROUPS = {"FX": "forex", "INDEX": "index", "METAL": "metal",
+                "ENERGY": "energ", "CRYPTO": "crypto", "COMMODITY": "commodit"}
+
+
+def _auto_universe(mt5, *, max_per_class: int = 40) -> list[tuple[str, str]]:  # pragma: no cover - VM
+    """Discover a diversified universe from the terminal by symbol PATH (capped per class).
+
+    (mt5.symbols_get(group=...) matches the symbol NAME, not the folder — so we scan paths.)
+    """
+    per: dict[str, list[str]] = {k: [] for k in _AUTO_GROUPS}
+    for s in (mt5.symbols_get() or ()):
+        path = (getattr(s, "path", "") or "").lower()
+        if getattr(s, "trade_mode", None) == getattr(mt5, "SYMBOL_TRADE_MODE_DISABLED", 0):
+            continue
+        for cls, needle in _AUTO_GROUPS.items():
+            if needle in path:
+                per[cls].append(s.name)
+                break
+    out = []
+    for cls, names in per.items():
+        for n in names[:max_per_class]:
+            out.append((n, cls))
+    return out
+
+
+def export(config_path: str, *, discover: bool = False, auto: bool = False,
+           max_per_class: int = 40) -> int:  # pragma: no cover - VM only
     import datetime as dt
 
     import pandas as pd
@@ -42,7 +69,13 @@ def export(config_path: str, *, discover: bool = False) -> int:  # pragma: no co
     m = raw.get("mt5", {})
     mt5 = connect_mt5(cfg)
     try:
-        universe = _universe(m)
+        universe = _auto_universe(mt5, max_per_class=max_per_class) if auto else _universe(m)
+        if auto:
+            by_cls: dict[str, int] = {}
+            for _, c in universe:
+                by_cls[c] = by_cls.get(c, 0) + 1
+            print(f"Auto-discovered {len(universe)} instruments: "
+                  + ", ".join(f"{k}:{v}" for k, v in by_cls.items()))
         tf = getattr(mt5, "TIMEFRAME_" + str(m.get("timeframe", "D1")))
         start = dt.datetime.fromisoformat(str(m.get("history_start", "2015-01-01")))
 
@@ -106,8 +139,11 @@ def main() -> int:  # pragma: no cover - VM only
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default="config/trend.yaml")
     ap.add_argument("--discover", action="store_true", help="list which universe symbols exist, then exit")
+    ap.add_argument("--auto", action="store_true",
+                    help="auto-discover a diversified universe from the terminal (ignores config universe)")
+    ap.add_argument("--max-per-class", type=int, default=40, help="cap instruments per asset class (--auto)")
     args = ap.parse_args()
-    return export(args.config, discover=args.discover)
+    return export(args.config, discover=args.discover, auto=args.auto, max_per_class=args.max_per_class)
 
 
 if __name__ == "__main__":

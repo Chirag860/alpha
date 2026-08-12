@@ -7,7 +7,7 @@ crypto) at a daily horizon, where a real, documented edge (time-series momentum)
 
 from __future__ import annotations
 
-from .backtest import BacktestResult, backtest, compute_metrics
+from .backtest import BacktestResult, backtest, compute_metrics, finalize_weights
 from .config import TrendParams, load_trend_params
 from .data import load_daily_panel, meta_arrays, simple_returns, to_matrices
 from .portfolio import apply_no_trade_band, target_weights
@@ -20,7 +20,7 @@ __all__ = [
     "load_daily_panel", "to_matrices", "simple_returns", "meta_arrays",
     "log_returns", "ewma_vol", "tsmom_signal", "carry_signal",
     "target_weights", "apply_no_trade_band",
-    "backtest", "compute_metrics", "BacktestResult",
+    "backtest", "compute_metrics", "finalize_weights", "BacktestResult",
     "compute_book", "run_trend_backtest",
     "validate_book", "format_report", "TrendValidation",
 ]

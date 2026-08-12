@@ -5,10 +5,10 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
-from .backtest import BacktestResult, backtest
+from .backtest import BacktestResult, backtest, finalize_weights
 from .config import TrendParams
 from .data import meta_arrays, simple_returns, to_matrices
-from .portfolio import apply_no_trade_band, target_weights
+from .portfolio import target_weights
 from .signals import carry_signal, ewma_vol, log_returns, tsmom_signal
 
 
@@ -28,7 +28,8 @@ def compute_book(panel: pl.DataFrame, meta: pl.DataFrame, params: TrendParams,
     carry = None
     if include_carry and params.carry_weight > 0:
         carry = carry_signal(ma["swap_long"], ma["swap_short"], close[-1], ma["contract_size"])
-    w = apply_no_trade_band(target_weights(sig, vol, params, carry=carry), params.no_trade_band)
+    raw = target_weights(sig, vol, params, carry=carry)
+    w = finalize_weights(raw, ret, params)          # overlay + caps + no-trade band (final book)
     return {"dates": dates, "symbols": symbols, "close": close, "ret": ret,
             "vol": vol, "signal": sig, "weights": w, "cost_bps": ma["spread_bps"],
             "asset_class": ma["asset_class"]}
