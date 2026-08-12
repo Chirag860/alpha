@@ -23,6 +23,7 @@ class TrendParams:
     # -- execution / costs --
     cost_bps_per_side: float = 1.0                    # default per-side cost if meta lacks spread
     no_trade_band: float = 0.05                       # skip rebalances smaller than this (x weight)
+    min_active_frac: float = 0.4                      # drop instruments trading < this fraction of days
 
     # -- validation --
     dsr_trial_sr_std: float = 0.5                     # spread of the null-trial Sharpes for DSR

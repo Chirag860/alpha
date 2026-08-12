@@ -33,12 +33,12 @@ def _flatten_universe(cfg_mt5) -> list[tuple[str, str]]:
     return out
 
 
-def do_backtest(config: str, synthetic: bool) -> int:
+def do_backtest(config: str, synthetic: bool, overrides: dict) -> int:
     from bsealpha.trend import (
         load_daily_panel, load_trend_params, run_trend_backtest,
         validate_book, format_report,
     )
-    params = load_trend_params(config)
+    params = load_trend_params(config, overrides=overrides)
     if synthetic:
         from bsealpha.trend.synthetic import generate_daily_panel
         print("Synthetic trending demo (no real data).")
@@ -114,10 +114,20 @@ def main() -> int:
     ap.add_argument("--synthetic", action="store_true", help="use synthetic data (with --backtest)")
     ap.add_argument("--live", action="store_true", help="daily rebalance to the MT5 demo (VM only)")
     ap.add_argument("--dry-run", action="store_true", help="with --live: compute + print, don't send")
+    ap.add_argument("--lookbacks", default=None, help="override signal lookbacks, e.g. 63,126,252")
+    ap.add_argument("--band", type=float, default=None, help="override no-trade band (cut turnover)")
+    ap.add_argument("--target-vol", type=float, default=None, help="override annual vol target")
     args = ap.parse_args()
     if args.live:
         return do_live(args.config, args.dry_run)
-    return do_backtest(args.config, args.synthetic)
+    overrides: dict = {}
+    if args.lookbacks:
+        overrides["lookbacks"] = [int(x) for x in args.lookbacks.split(",")]
+    if args.band is not None:
+        overrides["no_trade_band"] = args.band
+    if args.target_vol is not None:
+        overrides["target_ann_vol"] = args.target_vol
+    return do_backtest(args.config, args.synthetic, overrides)
 
 
 if __name__ == "__main__":

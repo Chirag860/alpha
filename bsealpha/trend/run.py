@@ -20,6 +20,14 @@ def compute_book(panel: pl.DataFrame, meta: pl.DataFrame, params: TrendParams,
     because MT5 gives no historical swap series — carry is a live overlay, not a backtested edge.
     """
     dates, symbols, close = to_matrices(panel)
+    # data-quality filter: drop instruments that trade too few days (dead/gappy/illiquid CFDs,
+    # whose forward-filled flat stretches are pure noise + cost). Keep the rest.
+    _r0 = simple_returns(close)
+    active = (np.abs(_r0) > 1e-9).mean(axis=0)
+    keep = active >= float(params.min_active_frac)
+    if 5 <= int(keep.sum()) < len(symbols):
+        close = close[:, keep]
+        symbols = [s for s, k in zip(symbols, keep) if k]
     ret = simple_returns(close)
     lr = log_returns(close)
     vol = ewma_vol(lr, params.vol_halflife)

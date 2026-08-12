@@ -32,29 +32,48 @@ _AUTO_GROUPS = {"FX": "forex", "INDEX": "index", "METAL": "metal",
                 "ENERGY": "energ", "CRYPTO": "crypto", "COMMODITY": "commodit"}
 
 
-def _auto_universe(mt5, *, max_per_class: int = 40) -> list[tuple[str, str]]:  # pragma: no cover - VM
-    """Discover a diversified universe from the terminal by symbol PATH (capped per class).
+def _spread_bps(mt5, name: str) -> float:  # pragma: no cover - VM
+    info = mt5.symbol_info(name)
+    tick = mt5.symbol_info_tick(name)
+    if info is None or tick is None:
+        return 1e9
+    px = float(getattr(tick, "ask", 0.0) or getattr(tick, "bid", 0.0) or getattr(info, "bid", 0.0) or 0.0)
+    point = float(getattr(info, "point", 0.0) or 0.0)
+    spr = float(getattr(info, "spread", 0.0) or 0.0)
+    if px <= 0:
+        return 1e9
+    return spr * point / px * 1e4
 
-    (mt5.symbols_get(group=...) matches the symbol NAME, not the folder — so we scan paths.)
+
+def _auto_universe(mt5, *, max_per_class: int = 40,
+                   max_spread_bps: float = 6.0) -> list[tuple[str, str]]:  # pragma: no cover - VM
+    """Discover a diversified, LIQUID universe from the terminal by symbol PATH.
+
+    Filters out wide-spread exotics (``> max_spread_bps``) — those churn cost, not diversification.
+    (``symbols_get(group=...)`` matches the NAME not the folder, so we scan paths.)
     """
-    per: dict[str, list[str]] = {k: [] for k in _AUTO_GROUPS}
+    cand: dict[str, list[tuple[str, float]]] = {k: [] for k in _AUTO_GROUPS}
     for s in (mt5.symbols_get() or ()):
         path = (getattr(s, "path", "") or "").lower()
         if getattr(s, "trade_mode", None) == getattr(mt5, "SYMBOL_TRADE_MODE_DISABLED", 0):
             continue
         for cls, needle in _AUTO_GROUPS.items():
             if needle in path:
-                per[cls].append(s.name)
+                mt5.symbol_select(s.name, True)
+                sb = _spread_bps(mt5, s.name)
+                if sb <= max_spread_bps:
+                    cand[cls].append((s.name, sb))
                 break
     out = []
-    for cls, names in per.items():
-        for n in names[:max_per_class]:
+    for cls, lst in cand.items():
+        lst.sort(key=lambda x: x[1])                 # tightest spreads (most liquid) first
+        for n, _ in lst[:max_per_class]:
             out.append((n, cls))
     return out
 
 
 def export(config_path: str, *, discover: bool = False, auto: bool = False,
-           max_per_class: int = 40) -> int:  # pragma: no cover - VM only
+           max_per_class: int = 40, max_spread_bps: float = 6.0) -> int:  # pragma: no cover - VM only
     import datetime as dt
 
     import pandas as pd
@@ -69,7 +88,8 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
     m = raw.get("mt5", {})
     mt5 = connect_mt5(cfg)
     try:
-        universe = _auto_universe(mt5, max_per_class=max_per_class) if auto else _universe(m)
+        universe = (_auto_universe(mt5, max_per_class=max_per_class, max_spread_bps=max_spread_bps)
+                    if auto else _universe(m))
         if auto:
             by_cls: dict[str, int] = {}
             for _, c in universe:
@@ -142,8 +162,11 @@ def main() -> int:  # pragma: no cover - VM only
     ap.add_argument("--auto", action="store_true",
                     help="auto-discover a diversified universe from the terminal (ignores config universe)")
     ap.add_argument("--max-per-class", type=int, default=40, help="cap instruments per asset class (--auto)")
+    ap.add_argument("--max-spread-bps", type=float, default=6.0,
+                    help="drop instruments with spread wider than this (--auto liquidity filter)")
     args = ap.parse_args()
-    return export(args.config, discover=args.discover, auto=args.auto, max_per_class=args.max_per_class)
+    return export(args.config, discover=args.discover, auto=args.auto,
+                  max_per_class=args.max_per_class, max_spread_bps=args.max_spread_bps)
 
 
 if __name__ == "__main__":
