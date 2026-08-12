@@ -1,0 +1,46 @@
+# =============================================================================
+# Trend + carry system config (daily, diversified MT5 basket).
+# Used by run_trend.py (backtest/validate/live) and the daily MT5 exporter.
+# =============================================================================
+
+trend:
+  # -- signal --
+  lookbacks: [21, 63, 126, 252]   # trailing-return horizons in trading days (1m/3m/6m/12m)
+  vol_halflife: 33                # EWMA halflife (days) for risk estimation
+  signal_cap: 1.5                 # clip combined signal to +/- this
+  carry_weight: 0.3               # weight on the LIVE carry tilt (swap-rate based)
+
+  # -- sizing / risk --
+  target_ann_vol: 0.15            # portfolio volatility target (annualized)
+  max_weight_per_instrument: 0.5  # cap |notional weight| per instrument (x NAV)
+  max_gross_leverage: 4.0         # cap sum of |weights|
+  vol_target_overlay: true        # tighten to realized vol on top of the analytic target
+
+  # -- execution / costs --
+  cost_bps_per_side: 1.0          # fallback per-side cost if meta lacks a spread estimate
+  no_trade_band: 0.05             # skip rebalances smaller than this (x weight) to cut turnover
+
+  # -- validation --
+  dsr_trial_sr_std: 0.5           # spread of null-trial Sharpes for the Deflated Sharpe
+
+# ------------------------------------------------------------------ MT5 daily connection
+# The diversified basket. Symbol names are broker-specific — verify against your terminal
+# (Ctrl+U). MetaQuotes-Demo has Forex / Metals / Indexes; add crypto/energy if your broker has them.
+mt5:
+  server: "MetaQuotes-Demo"
+  login: 0
+  password: ""
+  terminal_path: ""
+  timeframe: "D1"
+  data_dir: "data/trend"
+  history_start: "2015-01-01"
+  server_tz_offset_hours: 3
+  use_market_orders: true
+  # explicit diversified universe (edit to your broker's exact symbol names):
+  universe:
+    FX:    ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+            "EURJPY", "EURGBP", "GBPJPY"]
+    METAL: ["XAUUSD", "XAGUSD"]
+    INDEX: ["US500", "US30", "USTEC", "DE40", "UK100", "JP225"]
+    ENERGY: ["USOIL", "UKOIL"]
+    CRYPTO: ["BTCUSD", "ETHUSD"]
