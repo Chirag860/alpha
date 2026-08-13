@@ -127,7 +127,11 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
         start = dt.datetime.fromisoformat(str(m.get("history_start", "2015-01-01")))
 
         grid_rows, meta_rows, missing = [], [], []
-        for sym, cls in universe:
+        total = len(universe)
+        if not discover:
+            print(f"Downloading daily history for {total} instruments (one-time; then cached)...",
+                  flush=True)
+        for idx, (sym, cls) in enumerate(universe):
             info = mt5.symbol_info(sym)
             if info is None or not mt5.symbol_select(sym, True):
                 missing.append(sym)
@@ -136,18 +140,20 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
                 print(f"  OK  {sym:10s} [{cls}]  spread={getattr(info,'spread',0)} "
                       f"swap L/S={getattr(info,'swap_long',0)}/{getattr(info,'swap_short',0)}")
                 continue
+            print(f"  [{idx + 1:>3}/{total}] {sym:<12} [{cls}] ...", end="", flush=True)
             # copy_rates_from_pos FORCES the terminal to download history on demand -- far more
             # reliable than copy_rates_range, which returns empty for symbols (futures/forwards/
             # less-active CFDs) whose history isn't cached yet. Retry once, then fall back.
-            rates = mt5.copy_rates_from_pos(sym, tf, 0, 8000)
+            rates = mt5.copy_rates_from_pos(sym, tf, 0, 3000)
             if rates is None or len(rates) == 0:
                 import time as _t
                 _t.sleep(0.3)
-                rates = mt5.copy_rates_from_pos(sym, tf, 0, 8000)
+                rates = mt5.copy_rates_from_pos(sym, tf, 0, 3000)
             if rates is None or len(rates) == 0:
                 rates = mt5.copy_rates_range(sym, tf, start, dt.datetime.now())
             if rates is None or len(rates) == 0:
                 missing.append(sym)
+                print(" miss", flush=True)
                 continue
             df = pd.DataFrame(rates)
             ts = pd.to_datetime(df["time"], unit="s", utc=True)
@@ -155,6 +161,7 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
             ts = pd.to_datetime(df["time"], unit="s", utc=True)
             if len(df) == 0:
                 missing.append(sym)
+                print(" miss", flush=True)
                 continue
             for i in range(len(df)):
                 grid_rows.append({"date": ts.iloc[i].strftime("%Y-%m-%d"), "symbol": sym,
@@ -170,6 +177,7 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
                               "swap_long": float(getattr(info, "swap_long", 0.0) or 0.0),
                               "swap_short": float(getattr(info, "swap_short", 0.0) or 0.0),
                               "currency": str(getattr(info, "currency_profit", "USD") or "USD")})
+            print(f" {len(df):>5} bars", flush=True)
 
         if missing:
             print(f"  NOTE: {len(missing)} symbol(s) not found/available: {missing}\n"
