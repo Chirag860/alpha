@@ -136,12 +136,26 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
                 print(f"  OK  {sym:10s} [{cls}]  spread={getattr(info,'spread',0)} "
                       f"swap L/S={getattr(info,'swap_long',0)}/{getattr(info,'swap_short',0)}")
                 continue
-            rates = mt5.copy_rates_range(sym, tf, start, dt.datetime.now())
+            # copy_rates_from_pos FORCES the terminal to download history on demand -- far more
+            # reliable than copy_rates_range, which returns empty for symbols (futures/forwards/
+            # less-active CFDs) whose history isn't cached yet. Retry once, then fall back.
+            rates = mt5.copy_rates_from_pos(sym, tf, 0, 8000)
+            if rates is None or len(rates) == 0:
+                import time as _t
+                _t.sleep(0.3)
+                rates = mt5.copy_rates_from_pos(sym, tf, 0, 8000)
+            if rates is None or len(rates) == 0:
+                rates = mt5.copy_rates_range(sym, tf, start, dt.datetime.now())
             if rates is None or len(rates) == 0:
                 missing.append(sym)
                 continue
             df = pd.DataFrame(rates)
             ts = pd.to_datetime(df["time"], unit="s", utc=True)
+            df = df[(ts >= pd.Timestamp(start, tz="UTC")).values].reset_index(drop=True)
+            ts = pd.to_datetime(df["time"], unit="s", utc=True)
+            if len(df) == 0:
+                missing.append(sym)
+                continue
             for i in range(len(df)):
                 grid_rows.append({"date": ts.iloc[i].strftime("%Y-%m-%d"), "symbol": sym,
                                   "asset_class": cls, "open": float(df["open"].iloc[i]),
