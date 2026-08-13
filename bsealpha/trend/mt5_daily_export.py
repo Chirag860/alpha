@@ -76,14 +76,17 @@ def _auto_universe(mt5, *, max_per_class: int = 15,
         for cls, needles in _AUTO_GROUPS.items():
             if any(n in path for n in needles):
                 mt5.symbol_select(s.name, True)
-                sb = _spread_bps(mt5, s.name)
-                limit = max_spread_bps if max_spread_bps is not None else _SPREAD_LIMIT.get(cls, 30.0)
-                if sb <= limit:
-                    cand[cls].append((s.name, sb))
+                sb = _spread_bps(mt5, s.name)         # may be unreadable (closed market)
+                # FAIL OPEN: only exclude on an EXPLICIT override with a readable spread.
+                # A closed market (no live tick) must NOT drop the instrument — that silently
+                # deleted whole asset classes (bonds/commodities/crypto) that were shut at export.
+                if max_spread_bps is not None and sb < 1e8 and sb > max_spread_bps:
+                    break
+                cand[cls].append((s.name, sb))
                 break
     out = []
     for cls, lst in cand.items():
-        lst.sort(key=lambda x: x[1])                 # tightest spreads (most liquid) first
+        lst.sort(key=lambda x: x[1])                 # readable+tight first; unreadable last
         for n, _ in lst[:max_per_class]:
             out.append((n, cls))
     return out
