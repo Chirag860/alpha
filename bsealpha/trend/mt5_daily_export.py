@@ -27,8 +27,9 @@ def _universe(cfg_mt5: dict) -> list[tuple[str, str]]:
     return out
 
 
-# asset-class label -> case-insensitive substring of the symbol's MT5 path
-_AUTO_GROUPS = {"FX": "forex", "INDEX": "index", "METAL": "metal",
+# asset-class label -> case-insensitive substring of the symbol's MT5 path.
+# NB: "indic" (not "index") so it matches the "Indices" folder.
+_AUTO_GROUPS = {"FX": "forex", "INDEX": "indic", "METAL": "metal",
                 "ENERGY": "energ", "CRYPTO": "crypto", "COMMODITY": "commodit"}
 
 
@@ -88,14 +89,21 @@ def export(config_path: str, *, discover: bool = False, auto: bool = False,
     m = raw.get("mt5", {})
     mt5 = connect_mt5(cfg)
     try:
-        universe = (_auto_universe(mt5, max_per_class=max_per_class, max_spread_bps=max_spread_bps)
-                    if auto else _universe(m))
         if auto:
+            universe = _auto_universe(mt5, max_per_class=max_per_class, max_spread_bps=max_spread_bps)
+            # merge in the config's explicit names (e.g. known-good indices) that path-scan missed
+            have = {s for s, _ in universe}
+            for s, c in _universe(m):
+                if s not in have and mt5.symbol_info(s) is not None and mt5.symbol_select(s, True):
+                    universe.append((s, c))
+                    have.add(s)
             by_cls: dict[str, int] = {}
             for _, c in universe:
                 by_cls[c] = by_cls.get(c, 0) + 1
             print(f"Auto-discovered {len(universe)} instruments: "
                   + ", ".join(f"{k}:{v}" for k, v in by_cls.items()))
+        else:
+            universe = _universe(m)
         tf = getattr(mt5, "TIMEFRAME_" + str(m.get("timeframe", "D1")))
         start = dt.datetime.fromisoformat(str(m.get("history_start", "2015-01-01")))
 
