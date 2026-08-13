@@ -27,12 +27,23 @@ def _universe(cfg_mt5: dict) -> list[tuple[str, str]]:
     return out
 
 
-# asset-class label -> case-insensitive substring of the symbol's MT5 path.
-# NB: "indic" (not "index") so it matches the "Indices" folder. BOND/ENERGY/CRYPTO return
-# nothing on MetaQuotes-Demo but are auto-picked-up on a full-universe broker (Pepperstone/IC).
-_AUTO_GROUPS = {"FX": "forex", "INDEX": "indic", "METAL": "metal",
-                "ENERGY": "energ", "CRYPTO": "crypto", "COMMODITY": "commodit",
-                "BOND": "bond"}
+# Ordered (first match wins) asset-class -> substrings to look for in the lowercased symbol path.
+# Covers MetaQuotes-Demo ("Forex"/"Indexes"/"Metals") and Pepperstone/IC
+# ("Markets\\Forex\\...", "Markets\\Commodities\\Energies", "Markets\\Forwards\\Treasuries", ...).
+_AUTO_GROUPS = {
+    "FX":        ("forex",),
+    "INDEX":     ("indic",),                         # matches "Indices" / "Indexes"
+    "BOND":      ("treasur", "bond", "bund", "gilt"),
+    "METAL":     ("metal", "gold", "silver", "platin", "pallad"),
+    "ENERGY":    ("energ", "oil", "gas"),
+    "CRYPTO":    ("crypto",),
+    "COMMODITY": ("commodit", "soft", "agri"),
+}
+# per-class spread ceiling (bps): natural spreads vary hugely, so one number can't fit all.
+_SPREAD_LIMIT = {"FX": 4.0, "INDEX": 8.0, "BOND": 8.0, "METAL": 12.0,
+                 "ENERGY": 15.0, "CRYPTO": 80.0, "COMMODITY": 25.0}
+# never treat these as macro trend instruments (single names / duplicates / exotics)
+_EXCLUDE = ("stock", "etf", "warrant", "exotic", "ndf", "perp", "world asset")
 
 
 def _spread_bps(mt5, name: str) -> float:  # pragma: no cover - VM
@@ -49,22 +60,25 @@ def _spread_bps(mt5, name: str) -> float:  # pragma: no cover - VM
 
 
 def _auto_universe(mt5, *, max_per_class: int = 15,
-                   max_spread_bps: float = 6.0) -> list[tuple[str, str]]:  # pragma: no cover - VM
-    """Discover a diversified, LIQUID universe from the terminal by symbol PATH.
+                   max_spread_bps: float | None = None) -> list[tuple[str, str]]:  # pragma: no cover - VM
+    """Discover a diversified, LIQUID universe by symbol PATH, per-class spread-filtered.
 
-    Filters out wide-spread exotics (``> max_spread_bps``) — those churn cost, not diversification.
-    (``symbols_get(group=...)`` matches the NAME not the folder, so we scan paths.)
+    Excludes single stocks/ETFs/warrants/exotics/perps; keeps the tightest-spread instruments per
+    asset class up to ``max_per_class``. ``max_spread_bps`` overrides the per-class limits.
     """
     cand: dict[str, list[tuple[str, float]]] = {k: [] for k in _AUTO_GROUPS}
     for s in (mt5.symbols_get() or ()):
         path = (getattr(s, "path", "") or "").lower()
         if getattr(s, "trade_mode", None) == getattr(mt5, "SYMBOL_TRADE_MODE_DISABLED", 0):
             continue
-        for cls, needle in _AUTO_GROUPS.items():
-            if needle in path:
+        if any(x in path for x in _EXCLUDE):
+            continue
+        for cls, needles in _AUTO_GROUPS.items():
+            if any(n in path for n in needles):
                 mt5.symbol_select(s.name, True)
                 sb = _spread_bps(mt5, s.name)
-                if sb <= max_spread_bps:
+                limit = max_spread_bps if max_spread_bps is not None else _SPREAD_LIMIT.get(cls, 30.0)
+                if sb <= limit:
                     cand[cls].append((s.name, sb))
                 break
     out = []
@@ -76,7 +90,7 @@ def _auto_universe(mt5, *, max_per_class: int = 15,
 
 
 def export(config_path: str, *, discover: bool = False, auto: bool = False,
-           max_per_class: int = 40, max_spread_bps: float = 6.0) -> int:  # pragma: no cover - VM only
+           max_per_class: int = 15, max_spread_bps: float | None = None) -> int:  # pragma: no cover - VM only
     import datetime as dt
 
     import pandas as pd
@@ -173,8 +187,8 @@ def main() -> int:  # pragma: no cover - VM only
                     help="auto-discover a diversified universe from the terminal (ignores config universe)")
     ap.add_argument("--max-per-class", type=int, default=15,
                     help="cap instruments per asset class (--auto) — keeps the book balanced across classes")
-    ap.add_argument("--max-spread-bps", type=float, default=6.0,
-                    help="drop instruments with spread wider than this (--auto liquidity filter)")
+    ap.add_argument("--max-spread-bps", type=float, default=None,
+                    help="override the per-class spread ceiling (--auto); default uses per-class limits")
     args = ap.parse_args()
     return export(args.config, discover=args.discover, auto=args.auto,
                   max_per_class=args.max_per_class, max_spread_bps=args.max_spread_bps)
