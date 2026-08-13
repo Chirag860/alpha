@@ -28,9 +28,11 @@ def _universe(cfg_mt5: dict) -> list[tuple[str, str]]:
 
 
 # asset-class label -> case-insensitive substring of the symbol's MT5 path.
-# NB: "indic" (not "index") so it matches the "Indices" folder.
+# NB: "indic" (not "index") so it matches the "Indices" folder. BOND/ENERGY/CRYPTO return
+# nothing on MetaQuotes-Demo but are auto-picked-up on a full-universe broker (Pepperstone/IC).
 _AUTO_GROUPS = {"FX": "forex", "INDEX": "indic", "METAL": "metal",
-                "ENERGY": "energ", "CRYPTO": "crypto", "COMMODITY": "commodit"}
+                "ENERGY": "energ", "CRYPTO": "crypto", "COMMODITY": "commodit",
+                "BOND": "bond"}
 
 
 def _spread_bps(mt5, name: str) -> float:  # pragma: no cover - VM
@@ -46,7 +48,7 @@ def _spread_bps(mt5, name: str) -> float:  # pragma: no cover - VM
     return spr * point / px * 1e4
 
 
-def _auto_universe(mt5, *, max_per_class: int = 40,
+def _auto_universe(mt5, *, max_per_class: int = 15,
                    max_spread_bps: float = 6.0) -> list[tuple[str, str]]:  # pragma: no cover - VM
     """Discover a diversified, LIQUID universe from the terminal by symbol PATH.
 
@@ -169,7 +171,8 @@ def main() -> int:  # pragma: no cover - VM only
     ap.add_argument("--discover", action="store_true", help="list which universe symbols exist, then exit")
     ap.add_argument("--auto", action="store_true",
                     help="auto-discover a diversified universe from the terminal (ignores config universe)")
-    ap.add_argument("--max-per-class", type=int, default=40, help="cap instruments per asset class (--auto)")
+    ap.add_argument("--max-per-class", type=int, default=15,
+                    help="cap instruments per asset class (--auto) — keeps the book balanced across classes")
     ap.add_argument("--max-spread-bps", type=float, default=6.0,
                     help="drop instruments with spread wider than this (--auto liquidity filter)")
     args = ap.parse_args()
