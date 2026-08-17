@@ -38,6 +38,26 @@ def _ann_sharpe(net: np.ndarray) -> float:
     return float(net.mean() / net.std(ddof=1) * np.sqrt(252.0))
 
 
+def effective_independent_bets(ret: np.ndarray) -> float:
+    """Correlation-adjusted diversification: ``N_eff = (Σλ)² / Σλ²`` of the return correlation matrix.
+
+    Equals the instrument count when instruments are uncorrelated, collapses toward 1 when they all
+    move together. This is the number that actually drives portfolio Sharpe -- ten instruments that
+    are really one bet diversify like one. The direct read on the #1 real-P&L lever: add
+    *uncorrelated* markets, not just more markets.
+    """
+    ret = np.asarray(ret, dtype=float)
+    if ret.ndim != 2 or ret.shape[1] < 2:
+        return float(ret.shape[1] if ret.ndim == 2 else 1)
+    r = ret[:, ret.std(axis=0) > 1e-12]
+    if r.shape[1] < 2:
+        return float(r.shape[1])
+    C = np.nan_to_num(np.corrcoef(r, rowvar=False), nan=0.0)
+    lam = np.clip(np.linalg.eigvalsh(C), 0.0, None)
+    denom = float(np.sum(lam ** 2))
+    return float(lam.sum() ** 2 / denom) if denom > 0 else float(r.shape[1])
+
+
 def _per_year_sharpe(dates: np.ndarray, net: np.ndarray) -> dict:
     years = np.array([str(d)[:4] for d in dates.astype("datetime64[D]").astype(str)])
     out = {}
@@ -83,9 +103,17 @@ def validate_book(dates: np.ndarray, res: BacktestResult, params: TrendParams,
 def format_report(res: BacktestResult, v: TrendValidation, book: dict) -> str:
     m = res.metrics
     L = "-" * 70
+    n_inst = book["weights"].shape[1]
+    n_eff = effective_independent_bets(book["ret"])
+    held = float((np.abs(book["weights"]) > 1e-4).sum(axis=1).mean())
     lines = [
         L, "TREND + CARRY  —  OUT-OF-SAMPLE VALIDATION", L,
-        f"Instruments / days                 : {book['weights'].shape[1]} / {book['weights'].shape[0]:,}",
+        f"Instruments / days                 : {n_inst} / {book['weights'].shape[0]:,}",
+        "",
+        "DIVERSIFICATION  (the #1 lever on real Sharpe)",
+        f"  Independent bets (corr-adjusted)  : {n_eff:.1f} of {n_inst}   "
+        "[collapses toward 1 in a crowded/correlated universe]",
+        f"  Avg instruments held / day        : {held:.0f}",
         "",
         "PERFORMANCE (net of costs)",
         f"  Annualized return / vol          : {m['ann_return']:+.1%} / {m['ann_vol']:.1%}",
