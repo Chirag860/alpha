@@ -56,14 +56,13 @@ class ResearchResult:
     reconciliation: "ReconciliationReport | None" = None
 
 
-def run_pipeline(cfg: Config, *, seed: int | None = None,
-                 run_cpcv: bool = True, run_backtest_engine: bool = True,
-                 lockbox_days: int = 0, trial_db: str | None = None,
-                 run_paper: bool = False) -> ResearchResult:
-    """Run the full research pipeline on a freshly generated synthetic panel.
+def build_labeled_panel(cfg: Config, *, seed: int | None = None):
+    """Assemble the labeled cross-sectional panel: generate -> screen -> features -> labels.
 
-    ``lockbox_days`` holds out the most recent N sessions untouched (§5.4). ``trial_db``
-    enables automatic trial logging so the DSR uses the honest cumulative trial count.
+    The shared prefix of :func:`run_pipeline` and any harness that needs a ready-to-evaluate
+    panel (e.g. the news-feature A/B test in :mod:`bsealpha.text.evaluate_feature`). Returns
+    ``(labels, feature_cols, panel_data, n_universe)`` -- ``labels`` carries the features, the
+    residual-path targets, sample weights, and the label-support columns ``evaluate`` needs.
     """
     panel_data = generate_panel(cfg, seed=seed)
 
@@ -85,6 +84,19 @@ def run_pipeline(cfg: Config, *, seed: int | None = None,
     labels = triple_barrier_labels(feats, cfg)
     labels = add_cross_sectional_targets(labels, cfg)
     labels = compute_weights(labels, cfg)
+    return labels, feature_cols, panel_data, n_universe
+
+
+def run_pipeline(cfg: Config, *, seed: int | None = None,
+                 run_cpcv: bool = True, run_backtest_engine: bool = True,
+                 lockbox_days: int = 0, trial_db: str | None = None,
+                 run_paper: bool = False) -> ResearchResult:
+    """Run the full research pipeline on a freshly generated synthetic panel.
+
+    ``lockbox_days`` holds out the most recent N sessions untouched (§5.4). ``trial_db``
+    enables automatic trial logging so the DSR uses the honest cumulative trial count.
+    """
+    labels, feature_cols, panel_data, n_universe = build_labeled_panel(cfg, seed=seed)
 
     # LOCKBOX: physically hold out the most recent sessions, untouched (§5.4)
     lockbox_rows = 0

@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dl = ["torch>=2.1"]
 live = ["kiteconnect>=4.0", "websockets>=12.0"]
+llm = ["anthropic>=0.69", "certifi>=2024.0"]  # Phase 2 news extractor (live path only)
 dev = ["pytest>=7.4"]
 
 [project.scripts]
@@ -34,8 +35,9 @@ packages = [
     "bsealpha.data", "bsealpha.universe", "bsealpha.bars", "bsealpha.features",
     "bsealpha.labeling", "bsealpha.models", "bsealpha.validation",
     "bsealpha.portfolio", "bsealpha.backtest", "bsealpha.execution", "bsealpha.live",
+    "bsealpha.trend", "bsealpha.crash", "bsealpha.text",
 ]
-py-modules = ["run_research", "run_free", "run_live"]
+py-modules = ["run_research", "run_free", "run_live", "run_news"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
